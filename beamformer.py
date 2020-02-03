@@ -422,6 +422,8 @@ class Beamformer(object):
             data = ''
             while len(data) < 3:
                 inchars = self.pol.read()
+                if sys.version_info.major > 2:
+                    inchars = inchars.decode('latin-1')
                 data += inchars
                 if not inchars:
                     timeouts += 1
@@ -519,7 +521,7 @@ class Beamformer(object):
         
         - **Parameters**:
         
-            -  **diag:** Determine if the diagnostics info has to be printed or the calibrated info. 1 for diagnositcs and 0 for calibrated.
+            -  **diag:** Determine if the diagnostics info has to be printed or the calibrated info. 1 for diagnostics and 0 for calibrated.
             
         - **Returns**:
 
@@ -1518,4 +1520,3 @@ class Beamformer(object):
         
 
 # Xpol=Beamformer(XpolPort)
-

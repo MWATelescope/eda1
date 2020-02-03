@@ -1,5 +1,20 @@
 #!/usr/bin/env python
 
+"""
+Runs on one Raspberry Pi inside each of the beamformer control boxes, to send pointing commands to the eight
+beamformers connected to that box.
+
+On startup, it:
+    -Checks that the hostname (as reported by 'hostname -A') is either 'eda1com or 'eda2com', and exits if not.
+    -Uses the integer (1 or 2) in the hostname to determine whether this box is connected to the first
+      eight beamformers (0-8), or the second eight beamformers (9-F).
+    -Starts a Pyro4 daemon on port 19987 to listen for (and execute) remote procedure calls over the network.
+
+On exit (eg, with a control-C or a 'kill' command), it:
+    -Stops the Pyro4 daemon
+    -Exits.
+"""
+
 import atexit
 import logging
 from logging import handlers
@@ -111,15 +126,20 @@ def get_hostname():
 
 
 def point(starttime=0, bfnum=0, outstring='', results=None, resultlock=None):
-    """Given:
-         starttime: start time in seconds past the unix epoch,
-         bfnum: beamformer output number (1-8),
-         outstring: bit-string to send,
-         results: dictionary to store (temp, flag) returned from the beamformer,
-         resultlock: lock object to avoid conflicts writing to the results dict
+    """
+       Called with the start time of the next observation (a unix timestamp), the beamformer number to point, and
+       the string containing the delay bits to write.
 
-       Wait until the specified time and send the bit string to that MWA beamformer.
-       Called in a seperate thread, so all tiles are pointed simultaneously.
+       Waits until the specified time, then sends the bit string to the beamformer. The results are written to the
+       given dictionary, using the lock supplied - this is because 'point' is called in parallel for all eight
+       beamformers, using the same results dictionary, so that all eight beamformers are pointed at the same instant.
+
+       :param starttime: start time in seconds past the unix epoch,
+       :param bfnum: beamformer output number (1-8),
+       :param outstring: bit-string to send,
+       :param results: dictionary to store (temp, flag) returned from the beamformer,
+       :param resultlock: lock object to avoid conflicts writing to the results dict
+       :return:
     """
     now = time.time()
     if now < starttime:
@@ -132,8 +152,13 @@ def point(starttime=0, bfnum=0, outstring='', results=None, resultlock=None):
 
 
 def calc_azel(ra=0.0, dec=0.0, calctime=None):
-    """Takes RA and DEC in degrees, calculates Az/El of target at the specified time in unix epoch seconds.
-       If the time is not specified, calculate for 'now'
+    """
+       Takes RA and DEC in degrees, and calculates Az/El of target at the specified time
+
+       :param ra: Right Ascension (J2000) in degrees
+       :param dec: Declination (J2000) in degrees
+       :param calctime: Time (as a unix time stamp) for the conversion, or None to calculate for the current time.
+       :return: A tuple of (azimuth, elevation) in degrees
     """
     coords = SkyCoord(ra=ra, dec=dec, equinox='J2000', unit=(astropy.units.deg, astropy.units.deg))
     if calctime is None:
@@ -148,9 +173,18 @@ def calc_azel(ra=0.0, dec=0.0, calctime=None):
 
 class PointingSlave(pyslave.Slave):
     """Subclass the pycontroller slave class so we can override the notify() method to point the EDA.
+
+       Any methods decorated with '@Pyro4.expose' are called remotely over the network, from the control
+       computer.
     """
 
     def __init__(self, edanum=0, tileid=0, clientid=None, port=None):
+        """
+        :param edanum: Either 1 or 2, used to determine which set of 8 beamformers we are pointing.
+        :param tileid: Which MWA tile number we are (used to ignore notify() calls not meant for us)
+        :param clientid: Pyro4 service name - eg eda1com
+        :param port: network port to listen on
+        """
         self.tileid = tileid
         self.orig_tileid = tileid  # Save the 'real' tile ID here, so we can change the 'current' one
         self.edanum = edanum
@@ -161,9 +195,9 @@ class PointingSlave(pyslave.Slave):
     @Pyro4.expose
     def stop_tracking(self):
         """Change the tileid that we recognise for notify() calls, so that we ignore any notify() calls
-          from pycontroller in response to MWA observations. EDA client code calls to notify() use a
-          tileid of 0, and are always recognised
-       """
+           from pycontroller in response to MWA observations. EDA client code calls to notify() use a
+           tileid of 0, and are always recognised.
+        """
         self.tileid = None
         logger.info('Tracking disable, current tile ID set to None')
         return True
@@ -171,9 +205,9 @@ class PointingSlave(pyslave.Slave):
     @Pyro4.expose
     def start_tracking(self):
         """Change the tileid that we recognise for notify() calls, so that we react to any notify() calls
-          from pycontroller in response to MWA observations. EDA client code calls to notify() use a
-          tileid of 0, and are always recognised
-       """
+           from pycontroller in response to MWA observations. EDA client code calls to notify() use a
+           tileid of 0, and are always recognised.
+        """
         self.tileid = self.orig_tileid
         logger.info('Tracking enabled, current tile ID restored to %d' % self.tileid)
         return True
@@ -186,7 +220,8 @@ class PointingSlave(pyslave.Slave):
 
            The state is saved in a global variable, and lasts until the next call to onlybfs().
 
-           Returns False if there was an error parsing the bfids argument, True if successful.
+           :param bfids: A list of hex digits (eg ['0', '4', 'A']), or a string of hex digits (eg '04A')
+           :return: False if there was an error parsing the bfids argument, True if successful.
         """
         global ONLYBFs
         if bfids is None:
@@ -215,6 +250,9 @@ class PointingSlave(pyslave.Slave):
            EDA centre (0,0,0) in the units used in the locations file), in metres.
 
            The state is saved in a global variable, and lasts until the next call to set_cpos().
+
+           :param cpos: A tuple of three floats (offsets E/W, N/S and up/down), or None.
+           :return: False if there was an error parsing the cpos argument, True if successful.
         """
         global CPOS
         if cpos is None:
@@ -244,7 +282,7 @@ class PointingSlave(pyslave.Slave):
     def get_status(self):
         """Returns a status object. This is a tuple of:
              istracking (True or False),
-             ONLY1BF (global flag, None for all beamformers enabled, or a single hex digit if only one enabled)
+             ONLYBFs (global variable, None for all beamformers enabled, or a list of hex digit if only some are enabled)
              CPOS (global flag containing offset centre for delay calculations)
              self.tileid (None if not tracking, otherwise the MWA tile ID that the EDA is mirroring,
              self.lastpointing - the last pointing status.
@@ -271,6 +309,26 @@ class PointingSlave(pyslave.Slave):
            seperate threads. Each thread waits until the specified observation start time,
            sends the new delays to its MWA beamformer, and returns True or False. If all eight
            tiles point OK, the OK flag returned by this function is True.
+
+           Note that while RA/Dec/Az/El/Delays are passed individually for both X and Y polarisation, the
+           current code ignores the Y pol data, and uses the X pol data to set both the X and Y delay values.
+
+           :param obsid:     The MWA observation ID (time in GPS seconds) for the new observation.
+           :param starttime: The time the new observation should start, either in GPS seconds or
+                              seconds since the Unix epoch (defined when the client is registered).
+           :param stoptime:  The time the new observation should stop, in the same timescale (GPS seconds
+                              or Unix epoch seconds) as the starttime parameter.
+           :param clientid:  Arbitrary client name string, should match this client's ID.
+           :param rclass:    Registration class - either 'pointing', 'freq', 'atten', or 'obs'. Defines
+                              what sort of notification messages we should be sent. Should match registrion
+                              class of this client.
+           :param values:    The actual data for the new observation, as a dictionary where
+                              tile_id is the key. The value is a dictionary with polarisation ('X' or 'Y') as
+                              the key, and a tuple of (ra, dec, az, el, rawdelays) as value.
+                              Eg:  values={0:{'X':(12.0, -26.0, None, None, None), 'Y':(12.0, -26.0, None, None, None)}}
+
+           :return:          A tuple of (clientid, obsid, starttime, resdict) where 'resdict' is a dictionary with tileid
+                             as a key, and tuples of (BFtemperature,ok) as a value, and the other items are defined above.
         """
         assert rclass == 'pointing'
         assert clientid == self.clientid
@@ -283,20 +341,17 @@ class PointingSlave(pyslave.Slave):
             yra, ydec, yaz, yel, ydelays = values[0]['Y']
         elif self.tileid is None:
             logger.info('Not pointing - MWA tracking disabled, will only point when given tileid=0')
-            return self.clientid, obsid, starttime, self.tileid, -999, False  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
+            return self.clientid, obsid, starttime, {self.tileid:(999, False)}  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
         else:
             logger.warning('Not pointing - tileid of %s not in tileset: %s' % (self.tileid, values.keys()))
-            return self.clientid, obsid, starttime, self.tileid, -999, False  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
+            return self.clientid, obsid, starttime, {self.tileid:(999, False)}  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
 
-        if xdelays and (type(
-                xdelays) == dict):  # If delays is a dict, they are EDA delays, so use them. If a list, they are normal MWA tile delays
+        if xdelays and (type(xdelays) == dict):  # If delays is a dict, they are EDA delays, so use them. If a list, they are normal MWA tile delays
             logger.info("Received raw delays to send to beamformers")
             idelays = xdelays
         else:
             if (xra is not None) and (xdec is not None):
-                logger.info(
-                        "Received RA/Dec=%s/%s for target at obsid=%s, time=%s, calculating Az/El" % (
-                        xra, xdec, obsid, starttime))
+                logger.info("Received RA/Dec=%s/%s for target at obsid=%s, time=%s, calculating Az/El" % (xra, xdec, obsid, starttime))
                 az, el = calc_azel(ra=xra, dec=xdec, calctime=(starttime + ((starttime - stoptime) / 2)))
                 xaz = yaz = az
                 xel = yel = el
@@ -312,11 +367,10 @@ class PointingSlave(pyslave.Slave):
             if diagnostics is not None:
                 delays, delayerrs, sqe, maxerr, offcount = diagnostics
                 if offcount > 0:
-                    logger.warning(
-                        'Elevation low - %d dipoles disabled because delays were too large to reach in hardware.' % offcount)
+                    logger.warning('Elevation low - %d dipoles disabled because delays were too large to reach in hardware.' % offcount)
             if idelays is None:
                 logger.error("Error calculating delays for az=%s, el=%s" % (xaz, xel))
-                return self.clientid, obsid, starttime, self.tileid, -999, False
+                return self.clientid, obsid, starttime, {self.tileid:(999, False)}
 
         if ONLYBFs is None:
             offcount = 0
@@ -345,10 +399,8 @@ class PointingSlave(pyslave.Slave):
         results = {}
         resultlock = threading.RLock()
         for bfnum in range(1, 9):
-            bfid = hex(bfnum - 1 + offset)[
-                -1].upper()  # Translate input 1-8 on edanum=1 or edanum=2 to a hex bfid in the idelays dict ('0' to 'F')
-            tiledelays = [idelays[bfid][hexd] + 16 for hexd in
-                          pointing.HEXD]  # raw idelays values range from -16 to +15, so need to add 16 before we send them to the beamformer
+            bfid = hex(bfnum - 1 + offset)[-1].upper()  # Translate input 1-8 on edanum=1 or edanum=2 to a hex bfid in the idelays dict ('0' to 'F')
+            tiledelays = [idelays[bfid][hexd] + 16 for hexd in pointing.HEXD]  # raw idelays values range from -16 to +15, so need to add 16 before we send them to the beamformer
             logger.info("bfnum=%d, delays=%s" % (bfnum, tiledelays))
             outstring = gen_bitstring(tiledelays, tiledelays)
             newthread = threading.Thread(target=point,
@@ -372,8 +424,7 @@ class PointingSlave(pyslave.Slave):
         logger.info(
             "Pointed these tiles without error: %s" % [bfnum for bfnum in range(1, 9) if results[bfnum][1] == 128])
         if numok < 8:
-            logger.error(
-                "Errors in tiles: %s" % [(bfnum, results[bfnum]) for bfnum in range(1, 9) if results[bfnum][1] != 128])
+            logger.error("Errors in tiles: %s" % [(bfnum, results[bfnum]) for bfnum in range(1, 9) if results[bfnum][1] != 128])
         self.lastpointing = (starttime, obsid, xra, xdec, xaz, xel, xdelays, offcount, (numok == 8))
 
         return self.clientid, obsid + self.edanum, starttime, {self.tileid:((sumtemp / numok), (numok == 8))}
@@ -518,8 +569,7 @@ if __name__ == '__main__':
     (options, args) = parser.parse_args()
 
     init()
-    calc_azel(ra=0.0,
-              dec=-26.0)  # Run the astropy function once on startup, to preload all the ephemeris data and save time later
+    calc_azel(ra=0.0, dec=-26.0)  # Run the astropy function once on startup, to preload all the ephemeris data and save time later
     RegisterCleanup(cleanup)
 
     if options.nohostcheck:

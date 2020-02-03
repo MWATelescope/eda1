@@ -34,40 +34,25 @@ MAXDELAY = MAXDELAY1 + MAXDELAY2  # Maximum (most positive) possible physical de
 MAXERRORSTRICT = 8.0 / 100 / C  # 8.0cm = 267ps. For 'perfect' pointing, fail the delay calculation if maximum delay error is more than this
 MAXERRORLOOSE = 20.0 / 100 / C  # 20.0cm = 667ps. For 'ok' pointing, fail the delay calculation if maximum delay error is more than this
 
-# Correction factors - delay offsets, in picoseconds, to be applied to all dipoles connected to each of the given 1st-stage beamformers
-# BFCORRS = {'0': 0.0,
-#           '1': 342.2,
-#           '2': -239.7,
-#           '3': 254.0,
-#           '4': 226.3,   # eg, this offset value in picoseconds is added to all dipoles connected to beamformer '4'
-#           '5': -796.0,
-#           '6': 283.1,
-#           '7': -585.5,
-#           '8': -498.4,
-#           '9': 160.5,
-#           'A': -147.6,
-#           'B': 395.2,
-#           'C': -386.7,
-#           'D': -688.7,
-#           'E': 106.2,
-#           'F': -228.2 }
-
-BFCORRS = {'0':100.183,  # eg, this offset value in picoseconds is added to all dipoles connected to beamformer '0'
-           '1':442.383,
-           '2':-244.517,  # was -139.517,
-           '3':354.183,
-           '4':-143.517,  # was 326.483, then was 466.483
-           '5':-695.817,
-           '6':383.283,
-           '7':-485.317,
-           '8':-398.217,
-           '9':260.683,
-           'A':-47.417,
-           'B':495.383,
-           'C':-176.517,  # was -286.517,
-           'D':-588.517,
-           'E':206.383,
-           'F':-128.017}
+# Correction factors - delay offsets, in picoseconds, to be applied to all dipoles connected to each of the given 1st-stage beamformers.
+# These correct for length differences in the cables connecting the outputs of the sixteen first-stage MWA beamformers to the
+# inputs of the Kaelus beamformer. Start with all of these equal to zero, then calibrate on the sky to work out what they should be.
+BFCORRS = {'0':0.0,  # eg, this offset value in picoseconds is added to all dipoles connected to beamformer '0'
+           '1':0.0,
+           '2':0.0,
+           '3':0.0,
+           '4':0.0,
+           '5':0.0,
+           '6':0.0,
+           '7':0.0,
+           '8':0.0,
+           '9':0.0,
+           'A':0.0,
+           'B':0.0,
+           'C':0.0,
+           'D':0.0,
+           'E':0.0,
+           'F':0.0}
 
 
 def getOffsets(dipolefile=None):
@@ -132,20 +117,26 @@ def getOffsets(dipolefile=None):
     return offsets
 
 
-def calc_delays(offsets=None, az=0.0, el=90.0, verbose=True, errorlimit=MAXERRORSTRICT, strict=True, optimise=True,
-                clipdelays=True, cpos=(0.0, 0.0, 0.0)):
+def calc_delays(offsets=None,
+                az=0.0, el=90.0,
+                verbose=True,
+                errorlimit=MAXERRORSTRICT,
+                strict=True,
+                optimise=True,
+                clipdelays=True,
+                cpos=(0.0, 0.0, 0.0)):
     """Given an azimuth and elevation, return the delay settings for each dipole.
 
-       'az' (azimuth) of 0 is north and it increases clockwise.
-       'el' (elevation) is the angle up from the horizon.
-       These angles should be given in degrees
-
-       'offsets' is a dict containing the 256 dipole positions in metres, relative to the station centre (0, 0, 0)
-       'verbose' indicates some text output (when True) or completely silent (when False)
-       'errorlimit', If the maximum pointing error for any dipole exceeds this value in picoseconds, return (None,None).
-       'clipdelays', if True (default), means that MWA beamformer idelays are clipped to -16->+15, otherwise they are returned
+       :param az: azimuth (degrees), where 0 is north and it increases clockwise.
+       :param el: elevation (degrees) is the angle up from the horizon.
+       :param offsets: a dict containing the 256 dipole positions in metres, relative to the station centre (0, 0, 0)
+       :param verbose: Boolean, indicates some text output (when True) or completely silent (when False)
+       :param errorlimit: If the maximum pointing error for any dipole exceeds this value in picoseconds, return (None,None).
+       :param strict: If False, dipoles exceeding their maximum delay are disabled. If True, this call will fail if any exceed max delay.
+       :param optimise: If True, optimise least-squares error for all dipoles by trying alternate Kaelus delay values.
+       :param clipdelays: if True (default), means that MWA beamformer idelays are clipped to -16->+15, otherwise they are returned
                      without clipping so that single-beamformer mode works, for example, after normalising delays.
-       'cpos' is a tuple of (x, y, z) coordinates for the geometric delay centre, in metres, relative to the coordinates of the
+       :param cpos: a tuple of (x, y, z) coordinates for the geometric delay centre, in metres, relative to the coordinates of the
                      dipole offsets. Use this to specify an off-centre geometric delay calculation - for example, if you are
                      only using dipoles in a small cluster near one edge of the EDA, and want to reach lower than 20 degrees
                      away from the zenith. Defaults to (0,0,0).
@@ -311,23 +302,30 @@ def calc_delays(offsets=None, az=0.0, el=90.0, verbose=True, errorlimit=MAXERROR
     return idelays, (delays, delayerrs, sqe, maxerr, offcount)
 
 
-def calc_Kdelays(offsets=None, indelays=None, az=0.0, el=90.0, verbose=True, errorlimit=MAXERRORSTRICT, strict=True,
-                 optimise=True, clipdelays=True, cpos=(0.0, 0.0, 0.0)):
+def calc_Kdelays(offsets=None,
+                 indelays=None,
+                 az=0.0, el=90.0,
+                 verbose=True,
+                 errorlimit=MAXERRORSTRICT,
+                 strict=True,
+                 optimise=True,
+                 clipdelays=True,
+                 cpos=(0.0, 0.0, 0.0)):
     """Given an azimuth and elevation, and a set of existing integer delays, return the delay settings for each dipole
        with the best RMS error by using ONLY Kaelus (2nd stage) delay changes from the input array, keeping
        MWA BF (1st stage) delays the same..
 
-       'az' (azimuth) of 0 is north and it increases clockwise.
-       'el' (elevation) is the angle up from the horizon.
-       These angles should be given in degrees
-
-       'offsets' is a dict containing the 256 dipole positions in metres, relative to the station centre (0, 0, 0)
-       'indelays' is a structure in exactly the same format as the output delay structure from this function or calc_delays.
-       'verbose' indicates some text output (when True) or completely silent (when False)
-       'errorlimit', If the maximum pointing error for any dipole exceeds this value in picoseconds, return (None,None).
-       'clipdelays', if True (default), means that MWA beamformer idelays are clipped to -16->+15, otherwise they are returned
+       :param az: azimuth (degrees), where 0 is north and it increases clockwise.
+       :param el: elevation (degrees) is the angle up from the horizon.
+       :param indelays: a structure in exactly the same format as the output delay structure from this function or calc_delays.
+       :param offsets: a dict containing the 256 dipole positions in metres, relative to the station centre (0, 0, 0)
+       :param verbose: Boolean, indicates some text output (when True) or completely silent (when False)
+       :param errorlimit: If the maximum pointing error for any dipole exceeds this value in picoseconds, return (None,None).
+       :param strict: If False, dipoles exceeding their maximum delay are disabled. If True, this call will fail if any exceed max delay.
+       :param optimise: If True, optimise least-squares error for all dipoles by trying alternate Kaelus delay values.
+       :param clipdelays: if True (default), means that MWA beamformer idelays are clipped to -16->+15, otherwise they are returned
                      without clipping so that single-beamformer mode works, for example, after normalising delays.
-       'cpos' is a tuple of (x, y, z) coordinates for the geometric delay centre, in metres, relative to the coordinates of the
+       :param cpos: a tuple of (x, y, z) coordinates for the geometric delay centre, in metres, relative to the coordinates of the
                      dipole offsets. Use this to specify an off-centre geometric delay calculation - for example, if you are
                      only using dipoles in a small cluster near one edge of the EDA, and want to reach lower than 20 degrees
                      away from the zenith. Defaults to (0,0,0).
@@ -487,8 +485,6 @@ def calc_Kdelays(offsets=None, indelays=None, az=0.0, el=90.0, verbose=True, err
 def pdelays(delays=None, errors=None):
     """Pretty-print the given delays and calculate and print some statistics about the delay values.
     """
-    if errors is not None:
-        rdelays, delayerrs, errsum, maxerr, offcount = errors
     fstring = "%3d  " * 16
     print("Integer delays for each dipole, and Kaelus BF:")
     print("Dipole:                 0    1    2    3    4    5    6    7    8    9    A    B    C    D    E    F")
@@ -507,6 +503,7 @@ def pdelays(delays=None, errors=None):
     print("KB:   Max=%3d, Min=%3d, Mean=%7.3f" % (maxdelay, mindelay, meandelay))
 
     if errors is not None:
+        rdelays, delayerrs, errsum, maxerr, offcount = errors
         print()
         print("%d dipoles disabled because delays exceeded limits" % offcount)
         print("Delay errors per dipole, in cm:")

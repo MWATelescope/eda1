@@ -1,8 +1,14 @@
 #!/usr/bin/env python
 
 """Command line utility to control EDA, via Pyro4 remote procedure calls to the two
-  Raspberry Pi computers doing MWA beamformer control (with 8 beamformers each) and
-  one Raspberry Pi controlling the Kaelus beamformer.
+   Raspberry Pi computers doing MWA beamformer control (with 8 beamformers each) and
+   one Raspberry Pi controlling the Kaelus beamformer.
+
+   This code needs to know:
+      -The telescope coordinates (latitude/longitude/height), defined in the MWAPOS global variable below.
+      -The IP addresses of the two Raspberry Pi's inside the first-stage beamformer control boxes (eda1com and eda2com),
+        defined in the BURLS global variable below.
+      -The IP address of the Raspberry Pi that controls the Kaelus beamformer, defined in the KURL global variable below.
 """
 
 import datetime
@@ -28,6 +34,7 @@ import astropy.units
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation
 
+# Telescope coordinates
 MWAPOS = EarthLocation.from_geodetic(lon="116:40:14.93", lat="-26:42:11.95", height=377.8)
 
 kproxy = None
@@ -44,6 +51,7 @@ HEXD = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E
 
 MAXAGE = 60
 
+# Change the IP addresses in these URLs to the right ones on the local network.
 KURL = 'PYRO:Kaelus@10.128.2.51:19987'
 BURLS = {'eda1com':'PYRO:eda1com@10.128.2.63:19987', 'eda2com':'PYRO:eda2com@10.128.2.65:19987'}
 
@@ -71,6 +79,13 @@ BIGDAS = 'bigdas' in HOSTNAME  # True if we are running on bigdas
 
 
 def point_azel(az=0.0, el=0.0, delay=3):
+    """
+    Given an az/el and a delay in seconds, send network commands to point the EDA at the given az/el.
+
+    :param az: Azimuth in degrees
+    :param el: Elevation in degrees
+    :param delay: Delay in seconds, for the remote client to wait before sending the new pointing to the beamformers.
+    """
     print("Time %10.4f Pointing at az/el: %6.2f, %6.2f" % (time.time(), az, el))
     stime = int(time.time() + delay)
     values = {TILEID:{'X':(None, None, az, el, None),
@@ -83,7 +98,13 @@ def point_azel(az=0.0, el=0.0, delay=3):
 
 
 def calc_azel(ra=0.0, dec=0.0):
-    """Takes RA and DEC in degrees, calculates Az/El of target at the current time"""
+    """
+    Takes RA and DEC in degrees, and calculates Az/El of target at the current time
+
+    :param ra: Right Ascension (J2000) in degrees
+    :param dec: Declination (J2000) in degrees
+    :return: A tuple of (azimuth, elevation) in degrees
+    """
     coords = SkyCoord(ra=ra, dec=dec, equinox='J2000', unit=(astropy.units.deg, astropy.units.deg))
     now = Time.now()
     coords.location = MWAPOS
@@ -93,18 +114,38 @@ def calc_azel(ra=0.0, dec=0.0):
 
 
 def calc_radec(az=0.0, el=90.0):
-    """Takes Az and El in degrees, calculates RA/Dec of target at the current time"""
+    """
+    Takes Azimuth and Elevation in degrees, and calculates RA/Dec of target at the current time
+
+    :param az: Azimuth in degrees
+    :param el: Elevation in degrees
+    :return: A tuple of (ra, dec) in degrees (J2000)
+    """
     coords = SkyCoord(alt=el, az=az, unit=(astropy.units.deg, astropy.units.deg), frame='altaz', location=MWAPOS,
                       obstime=Time.now())
     return coords.icrs.ra.deg, coords.icrs.dec.deg
 
 
 def point_radec(ra=0.0, dec=0.0):
+    """
+    Given RA and DEC (J2000) in degrees, send commands the point the EDA at that position
+    :param ra: Right Ascension (J2000) in degrees
+    :param dec: Declination (J2000) in degrees
+    """
     az, el = calc_azel(ra=ra, dec=dec)
     point_azel(az=az, el=el)
 
 
 def track_radec(ra=0.0, dec=0.0, interval=120, total_track_time=31536000):
+    """
+    Given an RA/Dec, a tracking time, and a re-pointing interval, sesnd repeated pointing commands to follow
+    that RA/Dec until the end of the desired tracking time, then return.
+
+    :param ra: Right Ascension (J2000) in degrees
+    :param dec: Declination (J2000) in degrees
+    :param interval: Number of seconds to wait between re-pointing the telescope.
+    :param total_track_time: How many seconds to track for before the function returns.
+    """
     start_ux = time.time()
     end_ux = start_ux + total_track_time
 
@@ -116,7 +157,13 @@ def track_radec(ra=0.0, dec=0.0, interval=120, total_track_time=31536000):
 
 def dopoint(az=0.0, el=90.0, ra=None, dec=None):
     """Jump to the coordinates given. Calculate az/el if given ra/dec,
-       if both given then use az/el"""
+       if both given then use az/el.
+
+       :param ra: Right Ascension (J2000) in degrees, or None
+       :param dec: Declination (J2000) in degrees, or None
+       :param az: Azimuth in degrees, or None
+       :param el: Elevation in degrees, or None
+    """
     if az is None or el is None:
         if ra is not None and dec is not None:
             print("Time %10.4f pointing at calculated ra=%6.2f, dec=%6.2f" % (time.time(), ra, dec))
@@ -130,18 +177,27 @@ def dopoint(az=0.0, el=90.0, ra=None, dec=None):
 
 
 def start_tracking():
+    """
+       Start following the MWA observations.
+    """
     kproxy.start_tracking()
     for clientid, proxy in bfproxies.items():
         proxy.start_tracking()
 
 
 def stop_tracking():
+    """
+       Stop following the MWA observations.
+    """
     kproxy.stop_tracking()
     for clientid, proxy in bfproxies.items():
         proxy.stop_tracking()
 
 
 def is_tracking():
+    """
+       Returns True if we are following MWA observations, False otherwise.
+    """
     kstat = kproxy.get_status()
     istracking, onlybfs, cpos, tileid, lastpointing = kstat
     return istracking
@@ -185,6 +241,8 @@ def print_status():
 def getdata():
     """Returns a numpy array containing the most recently written EDA spectrum.
        Return None,None if the most recent file is older than MAXAGE seconds.
+
+       NOTE - this will only work when run on 'bigdas', where live spectrum data is written to /tmp every second.
     """
     if not BIGDAS:
         return None, None  # Can only access live spectra on bigdas
@@ -217,6 +275,10 @@ def getdata():
 
 
 def dostripes():
+    """
+    NOTE - this will only work when run on 'bigdas', where live spectrum data is written to /tmp every second.
+    :return:
+    """
     xarray = []
     yarray = []
     for elindex in range(len(ELS)):
@@ -293,6 +355,8 @@ def doimage(redfreq=95, greenfreq=160, bluefreq=200, bw=10, rdelay=1, cube=False
 
        The rdelay value specifies how many pointings behind the actual telescope position
        the last data values are, when read.
+
+       NOTE - this will only work when run on 'bigdas', where live spectrum data is written to /tmp every second.
     """
     if not BIGDAS:
         print("Needs to run on 'bigdas' host, exiting")
@@ -530,8 +594,9 @@ def domwagaintest():
     """Sweep the MWA (1st stage) BF's through delays of 0,1,2,4,8,16 and collect power data to see the
        relation between MWA BF delay line used, and output power. Keep the Kaelus delays the same.
 
-       Note that edacom.py adds 16 to the delays it receives, so we need to send -16, -15, -14, -12, -8,
-       and 0
+       Note that edacom.py adds 16 to the delays it receives, so we need to send -16, -15, -14, -12, -8, and 0
+
+       NOTE - this will only work when run on 'bigdas', where live spectrum data is written to /tmp every second.
     """
     HEXD = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
     RAWDELAYS = [0, 1, 2, 4, 8, 16]
@@ -617,6 +682,8 @@ def dokaelusgaintest():
        relation between Kaelus delay line used, and output power. Keep the MWA delays the same.
 
        Note that kaeslave.py adds 128 to the delays it receives, so we need to send -128, -127, -126, -124, -120, etc
+
+       NOTE - this will only work when run on 'bigdas', where live spectrum data is written to /tmp every second.
     """
     HEXD = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F']
     RAWDELAYS = [0, 1, 2, 4, 8, 16, 32, 64]
@@ -697,22 +764,30 @@ def dokaelusgaintest():
 
 
 def dohyda():
-    track_radec(ra=(9 + 18.0 / 60 + 6.0 / 3600) * 15, dec=(-12 - 5.0 / 60 - 44.0 / 3600),
-                interval=options.track_interval, total_track_time=options.total_track_time)
+    track_radec(ra=(9 + 18.0 / 60 + 6.0 / 3600) * 15,
+                dec=(-12 - 5.0 / 60 - 44.0 / 3600),
+                interval=options.track_interval,
+                total_track_time=options.total_track_time)
 
 
 def do3c444():
-    track_radec(ra=(22.0 + 14.0 / 60 + 26.0 / 3600) * 15, dec=(-17.0 - 1.0 / 60 - 36.0 / 3600),
-                interval=options.track_interval, total_track_time=options.total_track_time)
+    track_radec(ra=(22.0 + 14.0 / 60 + 26.0 / 3600) * 15,
+                dec=(-17.0 - 1.0 / 60 - 36.0 / 3600),
+                interval=options.track_interval,
+                total_track_time=options.total_track_time)
 
 
 def docena():
-    track_radec(ra=(13.0 + 25.0 / 60 + 28.0 / 3600) * 15, dec=(-43.0 - 1.0 / 60 - 9.0 / 3600),
-                interval=options.track_interval, total_track_time=options.total_track_time)
+    track_radec(ra=(13.0 + 25.0 / 60 + 28.0 / 3600) * 15,
+                dec=(-43.0 - 1.0 / 60 - 9.0 / 3600),
+                interval=options.track_interval,
+                total_track_time=options.total_track_time)
 
 
 def dopowertest(az=0.0, el=90.0, ra=None, dec=None):
     """Find the ratio between power at the given coordinates and power at the zenith
+
+       NOTE - this will only work when run on 'bigdas', where live spectrum data is written to /tmp every second.
     """
     if not BIGDAS:
         print("Needs to run on 'bigdas' host, exiting.")
@@ -774,6 +849,9 @@ def set_onlybfs(onlybfs):
 
 
 def init():
+    """
+       Create Pyro4 proxy objects for the PointingSlave objects on eda1com, eda2com, and the kaelus controller.
+    """
     global kproxy, bfproxies
     kproxy = Pyro4.Proxy(KURL)
     bfproxies = {}

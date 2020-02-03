@@ -1,5 +1,9 @@
 #!/usr/bin/env python
 
+"""
+Runs on the Raspberry Pi connected to the Kaelus beamformer via USB, to send pointing commands, etc.
+"""
+
 import os
 import logging
 from logging import handlers
@@ -91,6 +95,12 @@ class KaelusBeamformer(object):
     """
 
     def __init__(self, simulate=False, dipolefile=DIPOLEFILE):
+        """
+        Create an instance of a Kaelus beamformer.
+
+        :param simulate: If True, don't talk to the actual hardware, just simulate a physical box
+        :param dipolefile: File name to read dipole physical locations from.
+        """
         self.simulate = simulate
         if not self.simulate:
             try:
@@ -137,7 +147,10 @@ class KaelusBeamformer(object):
         self.offsets = pointing.getOffsets(dipolefile=dipolefile)  # Read dipole offsets in from file
 
     def _init_pol(self, pol):
-        """Initialise one physical Kaelus component (X or Y)
+        """
+        Initialise one physical Kaelus component (X or Y)
+
+        :param pol: An instance of beamformer.Beamformer, either self.X or self.Y
         """
         logger.info("Initialising %s" % pol.name)
         with pol.lock:
@@ -165,6 +178,8 @@ class KaelusBeamformer(object):
            class.
 
            Result is True if the call suceeded, False if there was a problem with the bfids parameter.
+
+           :param bfids: A list or a string of hex digits specifying imputs to use, or None to use all of them.
         """
         enables = [15] * 16
         global ONLYBFs
@@ -221,17 +236,25 @@ class KaelusBeamformer(object):
         return True
 
     def doPointing(self, starttime=0, xaz=0.0, xel=90.0, yaz=0.0, yel=90.0, xdelays=None, ydelays=None):
-        """Given coordinates or delay settings, repoint the tile right now.
+        """Given coordinates or delay settings, repoint the tile.
 
            NOTE that yaz and yel are ignored - only xaz and xel parameters are used to point BOTH polarisations. This is to
-           save time, as the delay calculations can significant length of time on a Raspeberry Pi.
+           save time, as the delay calculations can significant length of time on a Raspberry Pi.
 
            The X and Y polarisations are pointed in independent threads in parallel, to save time.
 
            Result is True for pointed OK, False for below 'horizon', None for simulated.
+
+           :param starttime: If supplied, wait until this unix timetamp before actually pointing the tile, then return
+           :param xaz: azimuth (in degrees) to point to
+           :param xel: elevation (in degrees) to point to
+           :param yaz: Y-pol azimuth (ignored)
+           :param yel: Y-pol elevation (ignored)
+           :param xdelays: raw delays - either None (to use az/el), or a dict (full EDA delays, as returned by pointing.calc_delays()
+           :param ydelays: Y-pol raw delays (ignored)
+           :return: True on success, False if there was a problem with the parameters
         """
-        if xdelays and (type(
-                xdelays) == dict):  # If delays is a dict, they are EDA delays, so use them. If a list, they are normal MWA tile delays
+        if xdelays and (type(xdelays) == dict):  # If delays is a dict, they are EDA delays, so use them. If a list, they are normal MWA tile delays
             logger.info("Received raw delays to send to beamformers")
             ydelays = xdelays
         else:
@@ -265,6 +288,12 @@ class KaelusBeamformer(object):
             return True
 
     def PrintInfo(self, diag=1):
+        """
+        Get status and version details from the Kaelus hardware, and print it to standard out.
+
+        :param diag: 1 (the default) to print diagnostic values, 0 to print calibrated values.
+        :return: None
+        """
         print("Beamformer status for X-pol:")
         with self.X.lock:
             self.X.OpenConnection()
@@ -278,6 +307,11 @@ class KaelusBeamformer(object):
         print('\n')
 
     def LogAlarms(self):
+        """
+        Write current hardware alarm status to the log file.
+
+        :return: None
+        """
         with self.X.lock:
             self.X.OpenConnection()
             self.X.ReadAlarms()
@@ -290,6 +324,12 @@ class KaelusBeamformer(object):
         logger.info("Alarm status for Y-pol: %s" % self.Y.AlarmStatus)
 
     def _point_pol(self, pol):
+        """
+        Point the given polarisation (self.X or self.Y) using the previously supplied delay switch settings
+
+        :param pol: An instance of beamformer.Beamformer, either self.X or self.Y
+        :return:
+        """
         logger.debug("Pointing %s" % pol.name)
         with pol.lock:
             pol.OpenConnection()
@@ -301,7 +341,12 @@ class KaelusBeamformer(object):
 
 def calc_azel(ra=0.0, dec=0.0, calctime=None):
     """Takes RA and DEC in degrees, calculates Az/El of target at the specified time in unix epoch seconds.
-       If the time is not specified, calculate for 'now'
+       If the time is not specified, calculate for 'now'.
+
+       :param ra: Right Ascension (J2000) in degrees
+       :param dec: Declination (J2000) in degrees
+       :param calctime: Time (as a unix time stamp) for the conversion, or None to calculate for the current time.
+       :return: A tuple of (azimuth, elevation) in degrees
     """
     coords = SkyCoord(ra=ra, dec=dec, equinox='J2000', unit=(astropy.units.deg, astropy.units.deg))
     if calctime is None:
@@ -353,11 +398,12 @@ class PointingSlave(pyslave.Slave):
     @Pyro4.expose
     def onlybfs(self, bfids=None):
         """If called with bfids=None, enables all first stage inputs to the Kaelus beamformer. If bfids
-          is a list or string of single hex digits, disable all Kaelus inputs except the ones specified.
+           is a list or string of single hex digits, disable all Kaelus inputs except the ones specified.
 
-          The state is saved in a global variable, and lasts until the next call to onlybfs().
+           The state is saved in a global variable, and lasts until the next call to onlybfs().
 
-          Returns False if there was an error parsing the bfids argument, True if successful.
+           :param bfids: A list of hex digits (eg ['0', '4', 'A']), or a string of hex digits (eg '04A')
+           :return: False if there was an error parsing the bfids argument, True if successful.
         """
         return self.bf.onlybfs(bfids=bfids)
 
@@ -369,6 +415,9 @@ class PointingSlave(pyslave.Slave):
            EDA centre (0,0,0) in the units used in the locations file), in metres.
 
            The state is saved in a global variable, and lasts until the next call to set_cpos().
+
+           :param cpos: A tuple of three floats (offsets E/W, N/S and up/down), or None.
+           :return: False if there was an error parsing the cpos argument, True if successful.
         """
         global CPOS
         if cpos is None:
@@ -398,7 +447,7 @@ class PointingSlave(pyslave.Slave):
     def get_status(self):
         """Returns a status object. This is a tuple of:
           istracking (True or False),
-          ONLY1BF (global flag, None for all beamformers enabled, or a single hex digit if only one enabled)
+          ONLYBFs (global variable, None for all beamformers enabled, or a list of hex digit if only some are enabled)
           CPOS (global flag containing offset centre for delay calculations)
           self.tileid (None if not tracking, otherwise the MWA tile ID that the EDA is mirroring,
           self.lastpointing - the last pointing status.
@@ -425,6 +474,23 @@ class PointingSlave(pyslave.Slave):
            Kaelus beamformer to send these delay settings. The Kaelus beamformer
            blocks until the specified time, and returns True or False, and this value
            is returned to Pycontroller.
+
+           :param obsid:     The MWA observation ID (time in GPS seconds) for the new observation.
+           :param starttime: The time the new observation should start, either in GPS seconds or
+                              seconds since the Unix epoch (defined when the client is registered).
+           :param stoptime:  The time the new observation should stop, in the same timescale (GPS seconds
+                              or Unix epoch seconds) as the starttime parameter.
+           :param clientid:  Arbitrary client name string, should match this client's ID.
+           :param rclass:    Registration class - either 'pointing', 'freq', 'atten', or 'obs'. Defines
+                              what sort of notification messages we should be sent. Should match registrion
+                              class of this client.
+           :param values:    The actual data for the new observation, as a dictionary where
+                              tile_id is the key. The value is a dictionary with polarisation ('X' or 'Y') as
+                              the key, and a tuple of (ra, dec, az, el, rawdelays) as value.
+                              Eg:  values={0:{'X':(12.0, -26.0, None, None, None), 'Y':(12.0, -26.0, None, None, None)}}
+
+           :return:          A tuple of (clientid, obsid, starttime, resdict) where 'resdict' is a dictionary with tileid
+                             as a key, and tuples of (BFtemperature,ok) as a value, and the other items are defined above.
         """
         assert rclass == 'pointing'
         assert clientid == self.clientid
@@ -437,10 +503,10 @@ class PointingSlave(pyslave.Slave):
             yra, ydec, yaz, yel, ydelays = values[0]['Y']
         elif self.tileid is None:
             logger.info('Not pointing - MWA tracking disabled, will only point when given tileid=0')
-            return self.clientid, obsid, starttime, self.tileid, -999, False  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
+            return self.clientid, obsid, starttime, {self.tileid:(999, False)}  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
         else:
             logger.warning('Not pointing - tileid of %s not in tileset: %s' % (self.tileid, values.keys()))
-            return self.clientid, obsid, starttime, self.tileid, -999, False  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
+            return self.clientid, obsid, starttime, {self.tileid:(999, False)}  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
 
         if xdelays and (type(xdelays) == dict):
             logger.info("Received raw delays to send to beamformers for obsid=%s, time=%s" % (obsid, starttime))
@@ -470,8 +536,7 @@ if __name__ == '__main__':
     os.system('setserial %s ^low_latency' % DEVICE0)
     os.system('setserial %s ^low_latency' % DEVICE1)
 
-    calc_azel(ra=0.0,
-              dec=-26.0)  # Run the astropy function once on startup, to preload all the ephemeris data and save time later
+    calc_azel(ra=0.0, dec=-26.0)  # Run the astropy function once on startup, to preload all the ephemeris data and save time later
 
     KBF = KaelusBeamformer(simulate=SIMULATE)
 

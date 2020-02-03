@@ -25,6 +25,14 @@ class Slave(object):
     """
 
     def __init__(self, clientid=None, rclass=None, port=None):
+        """
+        Creates a Slave object that will be registered with a PyController daemon to receive updates about the
+        upcoming scheduled observations.
+
+        :param clientid: The name of this client.
+        :param rclass: A string, eg 'pointing' - defines the format of the 'values' argument passed to notify() calls by PyController.
+        :param port: Network port to listen on when the request handler is running.
+        """
         if port:
             self.uri = ''
             self.port = port
@@ -44,24 +52,45 @@ class Slave(object):
 
     @Pyro4.expose
     def ping(self):
+        """
+        Called remotely over the network.
+
+        Returns immediately. Called to verify (to the controller) that the slave is alive.
+        :return: True
+        """
         logger.debug('ping() called on pyslave.Slave()')
         return True
 
     @Pyro4.expose
     def heartbeat(self):
+        """
+           Called remotely over the network.
+
+           Returns immediately. Called to verify (to the slave) that the controller is alive.
+           :return: None
+        """
         logger.debug('heartbeat() called on pyslave.Slave()')
         self.heartbeat_time = time.time()
         return
 
     def startup(self):
-        # Start the Pyro4 request loop for the slave object
+        """Start the Pyro4 request loop running in a background thread, for the slave object.
+        """
         self.sthread = threading.Thread(target=self._ServePyroRequests, name='SlavePyroDaemon:%s' % self.clientid)
         self.sthread.daemon = True
         self.sthread.start()
         self.started = True
 
-    @Pyro4.expose
     def register(self, tiles=None, gpstime=True, uri=None, control=False):
+        """
+        Called locally, to register this slave with a remote PyController process somewhere else on the network.
+
+        :param tiles: A list of integers - the tile number/s that this slave process is physically controlling.
+        :param gpstime: Boolean - True if starttime values passed to notify should be in GPS seconds, False for unix timestamps.
+        :param uri: The Pyro4 URI string that the controller should use to talk to this slave process.
+        :param control: True if this process is to be considered 'in control' of the tile number/s specified.
+        :return: None
+        """
         if tiles is None or self.rclass is None:
             logger.error('rclass and tiles must both be defined to register for notifications')
             return False
@@ -78,15 +107,16 @@ class Slave(object):
             self.uri = uri
         self.registered = True
 
-    @Pyro4.expose
     def deregister(self):
+        """
+        Called locally, to de-register this slave from the remote PyController, so we don't receive notify() calls.
+        """
         if (not self.registered):
             logger.error("Can't deregister %s" % self.uri)
             return False
         self.master.deregister(uri=self.uri)
         self.registered = False
 
-    @Pyro4.expose
     def deregall(self):
         """De-register any clients with the same clientid as this client, in case previous incarnations
            had different URIs (eg, same client ID but different port number).
@@ -98,6 +128,22 @@ class Slave(object):
         """Called remotely by the master object when registered tile properties change.
 
            This is a stub, to be overriden by sub-classes.
+
+           :param obsid:     The MWA observation ID (time in GPS seconds) for the new observation.
+           :param starttime: The time the new observation should start, either in GPS seconds or
+                              seconds since the Unix epoch (defined when the client is registered).
+           :param stoptime:  The time the new observation should stop, in the same timescale (GPS seconds
+                              or Unix epoch seconds) as the starttime parameter.
+           :param clientid:  Arbitrary client name string, should match this client's ID.
+           :param rclass:    Registration class - either 'pointing', 'freq', 'atten', or 'obs'. Defines
+                              what sort of notification messages we should be sent. Should match registrion
+                              class of this client.
+           :param values:    The actual data for the new observation, as a dictionary where
+                              tile_id is the key. The value is a dictionary with polarisation ('X' or 'Y') as
+                              the key, and a value whose contents depends on the registration class ('pointing', etc).
+
+           :return:          A tuple of (clientid, obsid, starttime, result) where 'result' depends on the registration
+                              class ('pointing', etc)., and the other items are defined above.
         """
         logger.info("Notify called on slave at %s" % self.uri)
         logger.info("obsid=%s, starttime=%s, clientid=%s, rclass=%s, values=%s" % (obsid, starttime, clientid, rclass, values))

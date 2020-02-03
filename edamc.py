@@ -1,5 +1,24 @@
 #!/usr/bin/env python
 
+"""
+Runs on one Raspberry Pi inside each of the beamformer control boxes, to do power control and voltage/current
+monitoring for the eight beamformers connected to that box.
+
+On startup, it:
+    -Checks that the hostname (as reported by 'hostname -A') is either 'eda1mc' or 'eda2mc', and exits if not.
+    -Turns on the 48V DC supply.
+    -Turns on, and enables, each of the eight beamformer DoC cards in that box.
+    -Loops forever, writing voltage and current information to stdout, and to /tmp/edamc.log.
+
+On exit (eg, with a control-C or a 'kill' command), it:
+    -Disables and turns off all the beamformer DoC cards in that box.
+    -Turns off the 48V DC supply.
+    -Exits.
+
+Make sure that this process is not running before connecting or disconnecting beamformers to the DoC cards, so that the
+sockets aren't 'live' with 48V DC.
+"""
+
 import atexit
 import logging
 import optparse

@@ -13,6 +13,11 @@ import pointing
 """
 EDA test library
 
+   This code needs to know:
+      -The IP addresses of the two Raspberry Pi's inside the first-stage beamformer control boxes (eda1com and eda2com),
+        defined in the BURLS global variable below.
+      -The IP address of the Raspberry Pi that controls the Kaelus beamformer, defined in the KURL global variable below.
+
 Example usage
 
 $ python
