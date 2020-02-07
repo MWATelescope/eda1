@@ -25,6 +25,7 @@ import sys
 import threading
 import time
 
+# noinspection PyUnresolvedReferences
 import RPi.GPIO as GPIO
 
 import astropy
@@ -32,6 +33,12 @@ import astropy.time
 import astropy.units
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation
+
+if sys.version_info.major == 2:
+    # noinspection PyUnresolvedReferences
+    STR_CLASS = basestring
+else:
+    STR_CLASS = str
 
 # set up the logging
 
@@ -160,6 +167,7 @@ def calc_azel(ra=0.0, dec=0.0, calctime=None):
        :param calctime: Time (as a unix time stamp) for the conversion, or None to calculate for the current time.
        :return: A tuple of (azimuth, elevation) in degrees
     """
+    # noinspection PyUnresolvedReferences
     coords = SkyCoord(ra=ra, dec=dec, equinox='J2000', unit=(astropy.units.deg, astropy.units.deg))
     if calctime is None:
         azeltime = Time.now()
@@ -227,10 +235,10 @@ class PointingSlave(pyslave.Slave):
         if bfids is None:
             logger.info('Enabling all channels')
             ONLYBFs = None
-        elif (type(bfids) == list) or (type(bfids) == str):
+        elif (type(bfids) == list) or (isinstance(bfids, STR_CLASS)):
             onlybfs = []
             for bfid in bfids:
-                if (type(bfid) is str) and (len(bfid) == 1):
+                if (isinstance(bfid, STR_CLASS)) and (len(bfid) == 1):
                     if bfid.upper() in pointing.HEXD:
                         onlybfs.append(bfid.upper())
                     else:
@@ -334,11 +342,9 @@ class PointingSlave(pyslave.Slave):
         assert clientid == self.clientid
         if self.tileid in values.keys():
             xra, xdec, xaz, xel, xdelays = values[self.tileid]['X']
-            yra, ydec, yaz, yel, ydelays = values[self.tileid]['Y']
         elif 0 in values.keys():
             logger.info('Manual pointing command received - tile 0 information')
             xra, xdec, xaz, xel, xdelays = values[0]['X']
-            yra, ydec, yaz, yel, ydelays = values[0]['Y']
         elif self.tileid is None:
             logger.info('Not pointing - MWA tracking disabled, will only point when given tileid=0')
             return self.clientid, obsid, starttime, {self.tileid:(999, False)}  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
@@ -353,8 +359,8 @@ class PointingSlave(pyslave.Slave):
             if (xra is not None) and (xdec is not None):
                 logger.info("Received RA/Dec=%s/%s for target at obsid=%s, time=%s, calculating Az/El" % (xra, xdec, obsid, starttime))
                 az, el = calc_azel(ra=xra, dec=xdec, calctime=(starttime + ((starttime - stoptime) / 2)))
-                xaz = yaz = az
-                xel = yel = el
+                xaz = az
+                xel = el
             else:
                 logger.info("Received Az/el for obsid=%s, time %s: az=%s, el=%s" % (obsid, starttime, xaz, xel))
             logger.info("New pointing for obsid=%s, time %s: az=%s, el=%s" % (obsid, starttime, xaz, xel))
@@ -526,6 +532,7 @@ def cleanup():
         pass  # In test mode, there's no PySlave instance
 
 
+# noinspection PyUnusedLocal
 def SignalHandler(signum=None, frame=None):
     """Called when a signal is received thay would result in the programme exit, if the
        RegisterCleanup() function has been previously called to set the signal handlers and

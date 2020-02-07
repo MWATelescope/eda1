@@ -21,6 +21,12 @@ import serial
 from serial import Serial
 import threading
 
+if sys.version_info.major == 2:
+    # noinspection PyUnresolvedReferences
+    STR_CLASS = basestring
+else:
+    STR_CLASS = str
+
 # set up the logging
 
 LOGLEVEL_CONSOLE = logging.INFO  # Logging level for console messages (INFO, DEBUG, ERROR, CRITICAL, etc)
@@ -187,11 +193,11 @@ class KaelusBeamformer(object):
         if bfids is None:
             logger.info('Enabling all channels')
             enables = [15] * 16
-        elif type(bfids) in [list, str]:
+        elif (type(bfids) == list) or (isinstance(bfids, STR_CLASS)):
             enables = [0] * 16
             onlybfs = []
             for bfid in bfids:
-                if (type(bfid) in [str]) and (len(bfid) == 1):
+                if (isinstance(bfid, STR_CLASS)) and (len(bfid) == 1):
                     if bfid.upper() in pointing.HEXD:
                         onlybfs.append(bfid.upper())
                         enables[pointing.HEXD.index(bfid.upper())] = 15
@@ -235,7 +241,7 @@ class KaelusBeamformer(object):
         logger.info('Finished KaelusBeamformer.MarcinHack with 2Y and 5X enabled.')
         return True
 
-    def doPointing(self, starttime=0, xaz=0.0, xel=90.0, yaz=0.0, yel=90.0, xdelays=None, ydelays=None):
+    def doPointing(self, starttime=0, xaz=0.0, xel=90.0, xdelays=None):
         """Given coordinates or delay settings, repoint the tile.
 
            NOTE that yaz and yel are ignored - only xaz and xel parameters are used to point BOTH polarisations. This is to
@@ -248,10 +254,7 @@ class KaelusBeamformer(object):
            :param starttime: If supplied, wait until this unix timetamp before actually pointing the tile, then return
            :param xaz: azimuth (in degrees) to point to
            :param xel: elevation (in degrees) to point to
-           :param yaz: Y-pol azimuth (ignored)
-           :param yel: Y-pol elevation (ignored)
            :param xdelays: raw delays - either None (to use az/el), or a dict (full EDA delays, as returned by pointing.calc_delays()
-           :param ydelays: Y-pol raw delays (ignored)
            :return: True on success, False if there was a problem with the parameters
         """
         if xdelays and (type(xdelays) == dict):  # If delays is a dict, they are EDA delays, so use them. If a list, they are normal MWA tile delays
@@ -348,6 +351,7 @@ def calc_azel(ra=0.0, dec=0.0, calctime=None):
        :param calctime: Time (as a unix time stamp) for the conversion, or None to calculate for the current time.
        :return: A tuple of (azimuth, elevation) in degrees
     """
+    # noinspection PyUnresolvedReferences
     coords = SkyCoord(ra=ra, dec=dec, equinox='J2000', unit=(astropy.units.deg, astropy.units.deg))
     if calctime is None:
         azeltime = Time.now()
@@ -547,7 +551,7 @@ if __name__ == '__main__':
         while True:
             az = random.random() * 360
             el = 82.0 + random.random() * 18.0
-            KBF.doPointing(xaz=az, xel=el, yaz=az, yel=el)
+            KBF.doPointing(xaz=az, xel=el)
             time.sleep(5)
     else:
         pcs = PointingSlave(bf=KBF, tileid=TILEID, clientid=CLIENTNAME, port=SLAVEPORT)
