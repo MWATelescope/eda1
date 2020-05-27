@@ -180,10 +180,10 @@ def init():
 
 def get_hostname():
     if sys.version_info.major == 2:
-        fqdn = subprocess.check_output(['hostname', '-A'], shell=False)
+        output = subprocess.check_output(['hostname'], shell=False)
     else:
-        fqdn = subprocess.check_output(['hostname', '-A'], shell=False).decode('UTF-8')
-    return fqdn.split('.')[0]
+        output = subprocess.check_output(['hostname'], shell=False).decode('UTF-8')
+    return output.strip()
 
 
 def turn_on_12():
