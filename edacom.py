@@ -422,7 +422,7 @@ class PointingSlave(pyslave.Slave):
         for t in comthreads:
             t.join()
         numok = 0
-        sumtemp = 0
+        sumtemp = 0.0
         for bfnum in range(1, 9):
             temp, flags = results[bfnum]
             if flags == 128:
@@ -434,7 +434,11 @@ class PointingSlave(pyslave.Slave):
             logger.error("Errors in tiles: %s" % [(bfnum, results[bfnum]) for bfnum in range(1, 9) if results[bfnum][1] != 128])
         self.lastpointing = (starttime, obsid, xra, xdec, xaz, xel, xdelays, offcount, (numok == 8))
 
-        return self.clientid, obsid + self.edanum, starttime, {self.tileid:((sumtemp / numok), (numok == 8))}
+        if numok:
+            avgtemp = sumtemp / numok
+        else:
+            avgtemp = 0.0
+        return self.clientid, obsid + self.edanum, starttime, {self.tileid:(avgtemp, (numok == 8))}
 
 
 def gen_bitstring(xdelays, ydelays):
