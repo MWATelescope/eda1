@@ -266,8 +266,7 @@ class KaelusBeamformer(object):
             if diagnostics is not None:
                 delays, delayerrs, sqe, maxerr, offcount = diagnostics
                 if offcount > 0:
-                    logger.warning(
-                        'Elevation low - %d dipoles disabled because delays were too large to reach in hardware.' % offcount)
+                    logger.warning('Elevation low - %d dipoles disabled because delays were too large to reach in hardware.' % offcount)
             ydelays = xdelays
         if (xdelays is None) or (ydelays is None):
             return False
@@ -275,8 +274,7 @@ class KaelusBeamformer(object):
         if self.simulate:
             return None
         else:
-            self.X.ChannelDelay = [xdelays['K'][bfid] + 128 for bfid in
-                                   pointing.HEXD]  # Add 128 to rescale from signed (-128 to +127) values
+            self.X.ChannelDelay = [xdelays['K'][bfid] + 128 for bfid in pointing.HEXD]  # Add 128 to rescale from signed (-128 to +127) values
             self.Y.ChannelDelay = [ydelays['K'][bfid] + 128 for bfid in pointing.HEXD]
             now = time.time()
             if starttime > now:
@@ -500,11 +498,9 @@ class PointingSlave(pyslave.Slave):
         assert clientid == self.clientid
         if self.tileid in values.keys():
             xra, xdec, xaz, xel, xdelays = values[self.tileid]['X']
-            yra, ydec, yaz, yel, ydelays = values[self.tileid]['Y']
         elif 0 in values.keys():
             logger.info('Manual pointing command received - tile 0 information')
             xra, xdec, xaz, xel, xdelays = values[0]['X']
-            yra, ydec, yaz, yel, ydelays = values[0]['Y']
         elif self.tileid is None:
             logger.info('Not pointing - MWA tracking disabled, will only point when given tileid=0')
             return self.clientid, obsid, starttime, {self.tileid:(999, False)}  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
@@ -517,14 +513,13 @@ class PointingSlave(pyslave.Slave):
         elif (xra is not None) and (xdec is not None):
             logger.info("Received RA/Dec=%s/%s for target at obsid=%s, time=%s, calculating Az/El" % (xra, xdec, obsid, starttime))
             az, el = calc_azel(ra=xra, dec=xdec, calctime=(starttime + ((starttime - stoptime) / 2)))
-            xaz = yaz = az
-            xel = yel = el
+            xaz = az
+            xel = el
         else:
             logger.info("Received Az/el for obsid=%s, time %s: az=%s, el=%s" % (obsid, starttime, xaz, xel))
         ok = self.bf.doPointing(starttime=starttime,
                                 xaz=xaz, xel=xel,
-                                yaz=yaz, yel=yel,
-                                xdelays=xdelays, ydelays=ydelays)  # Result is True for pointed OK, False for below 'horizon', None for simulated
+                                xdelays=xdelays)  # Result is True for pointed OK, False for below 'horizon', None for simulated
         self.lastpointing = (starttime, obsid, xra, xdec, xaz, xel, xdelays, -1, ok)  # Note that the offcount value isn't returned from the Kaelus BF, so set it to -1
         logger.info("Pointed: ok=%s for obsid=%s, time %s: ra=%s,  dec=%s, az=%s, el=%s" % (ok, obsid, starttime, xra, xdec, xaz, xel))
         return self.clientid, obsid, starttime, {self.tileid:(-999, ok)}
