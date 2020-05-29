@@ -78,6 +78,7 @@ logger.addHandler(ch)
 
 import Pyro4
 
+# noinspection PyUnresolvedReferences
 sys.excepthook = Pyro4.util.excepthook
 Pyro4.config.DETAILED_TRACEBACK = True
 Pyro4.config.SERIALIZERS_ACCEPTED.add('pickle')
@@ -525,7 +526,6 @@ def cleanup():
     GPIO.cleanup()
     logger.info("Shutting down network Pyro4 daemon")
     try:
-        pcs.deregister()
         pcs.exiting = True
         pcs.pyro_daemon.shutdown()
     except NameError:
@@ -610,17 +610,5 @@ if __name__ == '__main__':
         pcs.startup()
         time.sleep(1)
 
-        # We don't want to register with the MWA observation controller to shadow MWA observations:
-        # pcs.register(tiles=[TILEID], gpstime=False, control=True)
-
         while True:
-            # logger.debug('Now %8.1f, last heartbeat %8.1f' % (time.time(), pcs.heartbeat_time))
-            # if (time.time() - pcs.heartbeat_time) > PS_TIMEOUT:
-            #     logger.error('Timeout hearing from PyController, reregistering now')
-            #     try:
-            #         pcs.register(tiles=[TILEID], gpstime=False, control=True)
-            #         logger.info('Re-registered')
-            #     except:
-            #         logger.exception('Failed to re-register with ObsController')
-
             time.sleep(10)

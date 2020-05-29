@@ -13,10 +13,6 @@ loglevel = logging.DEBUG
 logger = logging.getLogger()
 logger.setLevel(loglevel)
 
-# Details for the MWA observation controller that we should register clients with
-MASTERPORT = 19999
-MASTERHOST = 'helios.mwa128t.org'
-
 REFERENCEIP = '8.8.8.8'  # A host guaranteed to be visible on the network interface that we want the Pyro server to bind to
 
 
@@ -26,8 +22,7 @@ class Slave(object):
 
     def __init__(self, clientid=None, rclass=None, port=None):
         """
-        Creates a Slave object that will be registered with a PyController daemon to receive updates about the
-        upcoming scheduled observations.
+        Creates a Slave object to receive remote commands.
 
         :param clientid: The name of this client.
         :param rclass: A string, eg 'pointing' - defines the format of the 'values' argument passed to notify() calls by PyController.
@@ -44,10 +39,8 @@ class Slave(object):
         self.rclass = rclass
         self.sthread = None
         self.clientid = clientid
-        self.master = Pyro4.Proxy(uri='PYRO:pycontroller@%s:%s' % (MASTERHOST, MASTERPORT))
         self.started = False  # Has the Pyroserver 'startup()' function been called?
         self.running = False  # Is the Pyroserver startup completed, so the server is running now?
-        self.registered = False  # Is the slave connected to a PyController instance?
         self.heartbeat_time = time.time()  # Timestamp of last method call
 
     @Pyro4.expose
@@ -62,6 +55,7 @@ class Slave(object):
         return True
 
     @Pyro4.expose
+    @Pyro4.oneway
     def heartbeat(self):
         """
            Called remotely over the network.
@@ -80,48 +74,6 @@ class Slave(object):
         self.sthread.daemon = True
         self.sthread.start()
         self.started = True
-
-    def register(self, tiles=None, gpstime=True, uri=None, control=False):
-        """
-        Called locally, to register this slave with a remote PyController process somewhere else on the network.
-
-        :param tiles: A list of integers - the tile number/s that this slave process is physically controlling.
-        :param gpstime: Boolean - True if starttime values passed to notify should be in GPS seconds, False for unix timestamps.
-        :param uri: The Pyro4 URI string that the controller should use to talk to this slave process.
-        :param control: True if this process is to be considered 'in control' of the tile number/s specified.
-        :return: None
-        """
-        if tiles is None or self.rclass is None:
-            logger.error('rclass and tiles must both be defined to register for notifications')
-            return False
-        if not self.started:
-            logger.error('Slave object must have startup() called before registering for notifications')
-            return False
-
-        if uri is None:
-            self.master.register(clientid=self.clientid, rclass=self.rclass, tiles=tiles, uri=self.uri, gpstime=gpstime,
-                                 control=control)
-        else:  # Pass an altered URI to the master, eg for use when port forwarding
-            self.master.register(clientid=self.clientid, rclass=self.rclass, tiles=tiles, uri=uri, gpstime=gpstime,
-                                 control=control)
-            self.uri = uri
-        self.registered = True
-
-    def deregister(self):
-        """
-        Called locally, to de-register this slave from the remote PyController, so we don't receive notify() calls.
-        """
-        if (not self.registered):
-            logger.error("Can't deregister %s" % self.uri)
-            return False
-        self.master.deregister(uri=self.uri)
-        self.registered = False
-
-    def deregall(self):
-        """De-register any clients with the same clientid as this client, in case previous incarnations
-           had different URIs (eg, same client ID but different port number).
-        """
-        return self.master.deregbyname(self.clientid)
 
     @Pyro4.expose
     def notify(self, obsid=None, starttime=None, stoptime=None, clientid=None, rclass=None, values=None):
