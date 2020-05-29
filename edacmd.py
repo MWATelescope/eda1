@@ -233,7 +233,7 @@ def print_status():
             print("No pointing since startup.")
         else:
             if clientid != 'kaelus':
-                print("  Last pointing at time %s (obsid=%d): ra=%s, dec=%s, az=%s, el=%s, with %d working dipoles" % (time.ctime(starttime), obsid, ra, dec, az, el, numdipoles))
+                print("  Last pointing at time %s (obsid=%d): ra=%s, dec=%s, az=%s, el=%s, with %d enabled dipoles" % (time.ctime(starttime), obsid, ra, dec, az, el, numdipoles))
             else:
                 print("  Last pointing at time %s (obsid=%d): ra=%s, dec=%s, az=%s, el=%s" % (time.ctime(starttime), obsid, ra, dec, az, el))
 
