@@ -425,6 +425,7 @@ class PointingSlave(pyslave.Slave):
         sumtemp = 0.0
         for bfnum in range(1, 9):
             temp, flags = results[bfnum]
+            logger.debug('Port %d: Flags=%d, Temp=%4.1f' % (bfnum, flags, temp))
             if flags == 128:
                 numok += 1
                 sumtemp += temp
