@@ -879,9 +879,9 @@ if __name__ == '__main__':
                       default=0.0)
     parser.add_option('--cy', dest='cy', help="N/S offset for delay center in m, relative to geometric centre of EDA",
                       default=0.0)
-    parser.add_option('--track_interval', '-i', dest='track_interval',
+    parser.add_option('--track_interval', '-i', dest='track_interval', type=int,
                       help="Tracking interval [default %default seconds]", default=120)
-    parser.add_option('--track_time', '-t', '--total_track_time', dest='total_track_time',
+    parser.add_option('--track_time', '-t', '--total_track_time', dest='total_track_time', type=int,
                       help="Total tracking time in seconds default should be infinity [default one year = %default seconds]",
                       default=31536000)
     parser.add_option('--onlybfs', '-o',
@@ -890,7 +890,7 @@ if __name__ == '__main__':
                            "all but those MWA beamformer, or ALL to turn them all on. The EDA stays " +
                            "in this state until changed with another 'edacmd --onlybfs=' call",
                       default=None)
-    parser.add_option('--loops', '-l', dest='loops', help="number of loops to run", default=NUMLOOPS)
+    parser.add_option('--loops', '-l', dest='loops', help="number of loops to run", type=int, default=NUMLOOPS)
     parser.add_option('--zsweep', '-z', dest='zsweep',
                       help="Run zenith sweep forever",
                       default=False,
