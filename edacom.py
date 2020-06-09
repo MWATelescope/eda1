@@ -207,7 +207,7 @@ class PointingSlave(pyslave.Slave):
            from pycontroller in response to MWA observations. EDA client code calls to notify() use a
            tileid of 0, and are always recognised.
         """
-        self.tileid = None
+        self.tileid = -1
         logger.info('Tracking disable, current tile ID set to None')
         return True
 
@@ -346,7 +346,7 @@ class PointingSlave(pyslave.Slave):
         elif 0 in values.keys():
             logger.info('Manual pointing command received - tile 0 information')
             xra, xdec, xaz, xel, xdelays = values[0]['X']
-        elif self.tileid is None:
+        elif self.tileid < 0:
             logger.info('Not pointing - MWA tracking disabled, will only point when given tileid=0')
             return self.clientid, obsid, starttime, {self.tileid:(999, False)}  # Tuple of clientid, tileid, starttime, temperature in deg C, and a 'pointing OK' boolean
         else:
