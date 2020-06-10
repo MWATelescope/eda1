@@ -309,6 +309,8 @@ def turnoff():
 def cleanup():
     logger.info("Turning off all eight beamformers, and 48V supplies")
     turnoff()
+    GPIO.output(DIGOUT1, 0)
+    GPIO.output(DIGOUT2, 0)
     logger.info("Cleaning up GPIO library")
     GPIO.cleanup()
 
