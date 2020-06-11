@@ -70,10 +70,8 @@ STATUS = None
 # IO pin allocations as (enable, power) for each of the 8 RxDOC cards in this box, numbered 1-8
 BFIOPINS = {1:(29, 16), 2:(26, 15), 3:(24, 13), 4:(23, 12), 5:(22, 11), 6:(21, 10), 7:(19, 8), 8:(18, 7)}
 
-POWER12 = 31
 POWER48 = 32
 ALARMPOWER = 36
-ALARM12 = 37
 ALARM48 = 38
 DIGOUT1 = 33
 DIGOUT2 = 35
@@ -121,10 +119,8 @@ class DOCstatus(object):
 class Status(object):
     def __init__(self):
         self.bfs = {}
-        self.power12 = bool(GPIO.input(POWER12))
         self.power48 = bool(GPIO.input(POWER48))
         self.alarmpower = None
-        self.alarm12 = None
         self.alarm48 = None
         bus = smbus.SMBus(1)  # Initialise the I2C bus and save the connection object
         for bfnum in range(1, 9):
@@ -133,7 +129,6 @@ class Status(object):
 
     def check(self):
         self.alarmpower = bool(GPIO.input(ALARMPOWER))
-        self.alarm12 = bool(GPIO.input(ALARM12))
         self.alarm48 = bool(GPIO.input(ALARM48))
 
         pled = 1
@@ -141,15 +136,16 @@ class Status(object):
         for bfnum in range(1, 9):
             self.bfs[bfnum].check()
             if not GPIO.input(BFIOPINS[bfnum][1]):
+                logger.debug('power on port %d is off' % bfnum)
                 pled = 0
             if not GPIO.input(BFIOPINS[bfnum][0]):
+                logger.debug('enable on port %d is off' % bfnum)
                 eled = 0
         GPIO.output(DIGOUT1, pled)
         GPIO.output(DIGOUT2, eled)
 
     def __repr__(self):
-        rets = "EDA Status: 12V=%3s (Alarm=%3s),    48V=%3s (Alarm=%3s)\n" % (BDICT[self.power12], BDICT[self.alarm12],
-                                                                              BDICT[self.power48], BDICT[self.alarm48])
+        rets = "EDA Status: 48V=%3s (Alarm=%3s)\n" % (BDICT[self.power48], BDICT[self.alarm48])
         rets += "  Beamformers:\n"
         for bfnum in range(1, 9):
             rets += '    ' + repr(self.bfs[bfnum]) + '\n'
@@ -163,10 +159,8 @@ def init():
     global STATUS
     GPIO.setmode(GPIO.BOARD)  # Use board connector pin numbers to specify I/O pins
     GPIO.setwarnings(False)
-    GPIO.setup(POWER12, GPIO.OUT)
     GPIO.setup(POWER48, GPIO.OUT)
     GPIO.setup(ALARMPOWER, GPIO.IN)
-    GPIO.setup(ALARM12, GPIO.IN)
     GPIO.setup(ALARM48, GPIO.IN)
     GPIO.setup(DIGOUT1, GPIO.OUT)
     GPIO.setup(DIGOUT2, GPIO.OUT)
@@ -185,19 +179,6 @@ def get_hostname():
         output = subprocess.check_output(['hostname'], shell=False).decode('UTF-8')
     return output.strip()
 
-
-def turn_on_12():
-    GPIO.output(POWER12, 1)
-    time.sleep(0.1)
-    STATUS.power12 = bool(GPIO.input(POWER12))
-    return (STATUS.power12 is True)
-
-
-def turn_off_12():
-    GPIO.output(POWER12, 0)
-    time.sleep(0.1)
-    STATUS.power12 = bool(GPIO.input(POWER12))
-    return (STATUS.power12 is False)
 
 
 def turn_on_48():
@@ -369,12 +350,10 @@ if __name__ == '__main__':
             assert eda == 'eda'
             assert (func == 'mc') or (func == 'com')
         except:
-            logger.error(
-                "Invalid hostname %s - should be of the form 'edaNmc' or 'edaNcom', where N is an integer" % hostname)
+            logger.error("Invalid hostname %s - should be of the form 'edaNmc' or 'edaNcom', where N is an integer" % hostname)
             sys.exit(-1)
         if func != 'mc':
-            logger.error(
-                "Can't start power/enable/voltage/current monitoring on a comms/pointing device. Run on edaNmc host instead")
+            logger.error("Can't start power/enable/voltage/current monitoring on a comms/pointing device. Run on edaNmc host instead")
             sys.exit(-2)
 
     logger.info("Turning on 48V supplies and all eight beamformers")
