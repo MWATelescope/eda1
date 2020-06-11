@@ -100,6 +100,8 @@ class DOCstatus(object):
         self.power = bool(GPIO.input(BFIOPINS[bfnum][1]))
 
     def check(self):
+        self.enable = bool(GPIO.input(BFIOPINS[self.bfnum][0]))
+        self.power = bool(GPIO.input(BFIOPINS[self.bfnum][1]))
         try:
             data = self.bus.read_i2c_block_data(self.ADDRESSES[self.bfnum], 0, 4)
             self.current = ((data[0] * 16) + (data[1] / 16)) * 20e-6 / 0.02  # 20uV per ADU, through a 0.02 Ohm shunt
@@ -135,10 +137,10 @@ class Status(object):
         eled = 1
         for bfnum in range(1, 9):
             self.bfs[bfnum].check()
-            if not GPIO.input(BFIOPINS[bfnum][1]):
+            if not self.bfs[bfnum].power:
                 logger.debug('power on port %d is off' % bfnum)
                 pled = 0
-            if not GPIO.input(BFIOPINS[bfnum][0]):
+            if not self.bfs[bfnum].enable:
                 logger.debug('enable on port %d is off' % bfnum)
                 eled = 0
         GPIO.output(DIGOUT1, pled)
@@ -277,6 +279,8 @@ def turnon():
         turnon_doc(bfnum)
         time.sleep(0.1)
         enable_doc(bfnum)
+    GPIO.output(DIGOUT1, 1)
+    GPIO.output(DIGOUT2, 1)
 
 
 def turnoff():
@@ -285,13 +289,13 @@ def turnoff():
         time.sleep(0.1)
         turnoff_doc(bfnum)
     turn_off_48()
+    GPIO.output(DIGOUT1, 0)
+    GPIO.output(DIGOUT2, 0)
 
 
 def cleanup():
     logger.info("Turning off all eight beamformers, and 48V supplies")
     turnoff()
-    GPIO.output(DIGOUT1, 0)
-    GPIO.output(DIGOUT2, 0)
     logger.info("Cleaning up GPIO library")
     GPIO.cleanup()
 
