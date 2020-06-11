@@ -138,10 +138,10 @@ class Status(object):
         for bfnum in range(1, 9):
             self.bfs[bfnum].check()
             if not self.bfs[bfnum].power:
-                logger.debug('power on port %d is off' % bfnum)
+#                logger.debug('power on port %d is off' % bfnum)
                 pled = 0
             if not self.bfs[bfnum].enable:
-                logger.debug('enable on port %d is off' % bfnum)
+#                logger.debug('enable on port %d is off' % bfnum)
                 eled = 0
         GPIO.output(DIGOUT1, pled)
         GPIO.output(DIGOUT2, eled)
