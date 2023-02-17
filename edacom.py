@@ -127,16 +127,24 @@ def init():
         GPIO.setup(txdata, GPIO.OUT)
         GPIO.setup(txclock, GPIO.OUT)
 
+#
+# def get_hostname():
+#     """Returns the hostname, with domain stripped off. Used to work out whether this Raspberry Pi controls MWA
+#        beamformers 0-8 (eda1com.mwa128t.org) or beamformers 9-F (eda2com.mwa128t.org).
+#     """
+#     if sys.version_info.major == 2:
+#         fqdn = subprocess.check_output(['hostname', '-A'], shell=False)
+#     else:
+#         fqdn = subprocess.check_output(['hostname', '-A'], shell=False).decode('UTF-8')
+#     return fqdn.split('.')[0]
+
 
 def get_hostname():
-    """Returns the hostname, with domain stripped off. Used to work out whether this Raspberry Pi controls MWA
-       beamformers 0-8 (eda1com.mwa128t.org) or beamformers 9-F (eda2com.mwa128t.org).
-    """
     if sys.version_info.major == 2:
-        fqdn = subprocess.check_output(['hostname', '-A'], shell=False)
+        output = subprocess.check_output(['hostname'], shell=False)
     else:
-        fqdn = subprocess.check_output(['hostname', '-A'], shell=False).decode('UTF-8')
-    return fqdn.split('.')[0]
+        output = subprocess.check_output(['hostname'], shell=False).decode('UTF-8')
+    return output.strip().split('.')[0]
 
 
 def point(starttime=0, bfnum=0, outstring='', results=None, resultlock=None):

@@ -179,7 +179,7 @@ def get_hostname():
         output = subprocess.check_output(['hostname'], shell=False)
     else:
         output = subprocess.check_output(['hostname'], shell=False).decode('UTF-8')
-    return output.strip()
+    return output.strip().split('.')[0]
 
 
 
