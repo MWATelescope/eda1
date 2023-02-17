@@ -24,6 +24,7 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 
 # noinspection PyUnresolvedReferences
 import RPi.GPIO as GPIO
@@ -33,6 +34,11 @@ import astropy.time
 import astropy.units
 from astropy.time import Time
 from astropy.coordinates import SkyCoord, EarthLocation
+from astropy.utils.exceptions import AstropyWarning, ErfaWarning
+
+warnings.simplefilter('ignore', AstropyWarning)
+warnings.simplefilter('ignore', ErfaWarning)
+
 
 if sys.version_info.major == 2:
     # noinspection PyUnresolvedReferences
