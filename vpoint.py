@@ -469,7 +469,7 @@ def gettiledelays(cpos=None, az=0.0, el=90.0):
         parrowlen = 20.0
         parrowsw = 1.0
     else:
-        parrowlen = 5.0
+        parrowlen = 2.5
         parrowsw = 0.2
 
     north = v(0, 1, 0)  # Due north, elevation 0 degrees
@@ -665,7 +665,7 @@ if __name__ == '__main__':
             print("Invalid centre position cx=%s, cy=%s given" % (options.cx, options.cy))
             sys.exit()
 
-    avis, ivis, dvis = True, True, False
+    avis, ivis, dvis = True, False, False
 
     if mode == 'EDA':
         eda = geteda()
